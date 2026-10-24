@@ -15,9 +15,15 @@
 
 ## 构建
 
-需要 JDK 17+（本机用 21）、Android SDK（compileSdk 35）。
+需要 JDK 17+（本机用 21）、Android SDK（compileSdk 35，build-tools 34）。
+
+UI 框架在同级目录引用，克隆时把两个仓库放在同一个父目录下：
 
 ```bash
+git clone git@github.com:BlueEve04/BreezyUI.git
+git clone git@github.com:BlueEve04/BreezyMusic.git
+cd BreezyMusic
+
 # local.properties 写自己的 SDK 路径
 echo sdk.dir=/path/to/AndroidSdk > local.properties
 
