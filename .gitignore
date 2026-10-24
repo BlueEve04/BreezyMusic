@@ -1,0 +1,15 @@
+# 构建产物
+build/
+.gradle/
+.idea/
+*.iml
+local.properties
+
+# 签名凭证（严禁入库）
+keystore.properties
+*.jks
+*.keystore
+
+# 系统文件
+.DS_Store
+Thumbs.db
