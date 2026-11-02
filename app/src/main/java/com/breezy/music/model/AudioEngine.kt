@@ -316,6 +316,17 @@ object AudioEngine {
         }
     }
 
+    /** Seek 到绝对位置（毫秒）。媒体通知的进度条按毫秒给值，不能走比例接口 */
+    fun seekToMs(ms: Long) {
+        val exo = player ?: return
+        val duration = exo.duration
+        if (duration > 0 && duration != C.TIME_UNSET) {
+            val target = ms.coerceIn(0L, duration)
+            exo.seekTo(target)
+            PlaybackState.progress = (target.toFloat() / duration).coerceIn(0f, 1f)
+        }
+    }
+
     /** 当前播放位置（毫秒），用于运动音乐等场景 */
     fun currentPositionMs(): Long = player?.currentPosition ?: 0L
 

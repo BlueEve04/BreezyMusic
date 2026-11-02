@@ -63,6 +63,10 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+        // SuperLyricApi 4.0 用 Kotlin 2.2 编译，其 metadata 版本 2.2.0 高于本项目
+        // Kotlin 1.9 编译器能读的上限（2.0.0）。该库对外只有普通类与 Binder 调用，
+        // 不涉及新语言特性，跳过元数据版本校验是安全的。
+        freeCompilerArgs = freeCompilerArgs + "-Xskip-metadata-version-check"
     }
 
     buildFeatures {
@@ -119,7 +123,7 @@ dependencies {
     implementation("androidx.media3:media3-extractor:$media3Version")
 
     // 歌词外发：Super Lyric API（Binder/AIDL 广播，供状态栏歌词等外部「歌词获取器」读取）
-    implementation("com.github.HChenX:SuperLyricApi:3.7")
+    implementation("com.github.HChenX:SuperLyricApi:4.0")
 
     // Room (持久化数据库)
     val roomVersion = "2.6.1"

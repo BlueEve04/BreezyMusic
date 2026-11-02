@@ -39,7 +39,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.platform.LocalDensity
+import com.breezy.music.model.LyricPublisher
 import com.breezy.music.model.MusicRepository
+import com.breezy.music.model.PlaybackState
 import com.breezy.music.model.Preferences
 import com.breezy.music.model.ThemeMode
 import com.breezy.music.model.ThemeState
@@ -375,6 +377,26 @@ fun SettingsScreen(
                                 }
                             )
                         }
+                    }
+                )
+
+                // 歌词：外发到 Super Lyric（状态栏歌词）
+                var superLyricOn by remember { mutableStateOf(Preferences.isSuperLyricEnabled(context)) }
+                BreezyListItem(
+                    title = "状态栏歌词（Super Lyric）",
+                    subtitle = LyricPublisher.status().let { s ->
+                        when {
+                            !s.supported -> "需要 Android 8.0 及以上"
+                            !s.available -> "未检测到接收端，安装 Super Lyric 后自动生效"
+                            else -> "${s.mode} · 歌词已可外发"
+                        }
+                    },
+                    leadingIcon = Icons.Default.Subtitles,
+                    trailingSwitchChecked = superLyricOn,
+                    onTrailingSwitchChange = { on ->
+                        superLyricOn = on
+                        LyricPublisher.setEnabled(context, on)
+                        if (on) LyricPublisher.republish(context, PlaybackState.currentSong)
                     }
                 )
 

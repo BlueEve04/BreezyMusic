@@ -68,6 +68,14 @@ object MediaNotificationManager {
                 }
                 override fun onSkipToNext() { PlaybackState.playNext() }
                 override fun onSkipToPrevious() { PlaybackState.playPrevious() }
+                /**
+                 * 系统媒体卡片的进度条拖动会走到这里。
+                 * 只声明 ACTION_SEEK_TO 还不够：没有这个回调，进度条会显示但拖不动。
+                 */
+                override fun onSeekTo(pos: Long) {
+                    AudioEngine.seekToMs(pos)
+                    PlaybackState.notifyUpdatePublic()
+                }
                 override fun onStop() {
                     if (PlaybackState.isPlaying) {
                         AudioEngine.pause()
@@ -82,6 +90,7 @@ object MediaNotificationManager {
                         PlaybackStateCompat.ACTION_PAUSE or
                         PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
                         PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                        PlaybackStateCompat.ACTION_SEEK_TO or
                         PlaybackStateCompat.ACTION_STOP
                     )
                     .build()
@@ -133,6 +142,7 @@ object MediaNotificationManager {
                     PlaybackStateCompat.ACTION_PAUSE or
                     PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
                     PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                    PlaybackStateCompat.ACTION_SEEK_TO or
                     PlaybackStateCompat.ACTION_STOP
                 )
                 .build()

@@ -49,12 +49,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
@@ -145,6 +147,19 @@ fun MusicPlayerScreen(
         // ── 实时读取 Animatable 值（derivedStateOf 避免不必要重算） ──
         val p by remember { derivedStateOf { progress.value } }
 
+        // ── 封面取色与公用背景 ──
+        val context = LocalContext.current
+        val coverPath = PlaybackState.currentSong?.path
+    val coverContext = LocalContext.current
+    val themePrimary = BreezyTheme.colors.primary
+    val fromCover = remember(coverPath) { CoverPalette.accent(coverContext, coverPath) }
+    val coverAccent = fromCover ?: themePrimary
+        val surfaceForTint = BreezyTheme.colors.surface
+        val coverTint = remember(coverPath) {
+            CoverPalette.muted(context, coverPath) ?: surfaceForTint
+        }
+
+
         // ── 音效面板的展开进度：0 = 底部悬浮条，1 = 整页 ──
         val effectsProgress = remember { Animatable(0f) }
 
@@ -215,7 +230,15 @@ fun MusicPlayerScreen(
         val cardOffsetYDp by remember { derivedStateOf { lerpDp(dockOffsetY, 0.dp, p) } }
         val cardRadiusDp by remember { derivedStateOf { lerpDp(20.dp, 0.dp, p) } }
         val cardShadowDp by remember { derivedStateOf { lerpDp(12.dp, 0.dp, p) } }
-        val cardBackground = lerpColor(colors.surface, colors.background, p)
+
+        // Dock 状态：把封面主色淡着压进 surface，像素级还是 surface，只是带一点色温
+        val dockBackground = lerpColor(colors.surface, coverTint, 0.30f)
+        // 卡片底色**始终不透明**：它是这一层的地板。
+        // 早先让底色淡出、背景淡入，两者中间那一段会同时半透明，
+        // 主界面的标题和卡片就会从缝里透出来——全展开时必须完全不透明。
+        // 现在改成：地板一直是 Dock 色，模糊封面整层盖上去做交叉渐变。
+        val backdropFade = ((p - 0.80f) / 0.20f).coerceIn(0f, 1f)
+        val cardBackground = dockBackground
 
         // ═══════════════════════════════════════
         // 播放卡片容器
@@ -224,15 +247,8 @@ fun MusicPlayerScreen(
             modifier = Modifier
                 .offset(x = cardOffsetXDp, y = cardOffsetYDp)
                 .size(cardWidthDp, cardHeightDp)
-                .graphicsLayer {
-                    val depth = abs(pagePosition.value).coerceIn(0f, 1f)
-                    val scale = 1f - depth * 0.12f
-                    scaleX = scale
-                    scaleY = scale
-                    translationY = depth * screenHeightPx * 0.04f
-                    shadowElevation = with(density) { cardShadowDp.toPx() }
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.5f)
-                }
+                // 不再用 graphicsLayer 的 shadowElevation：它按图层轮廓投矩形影子，
+                // 圆角卡片下面会多出一个"半透明直角矩形"，Dock 状态最明显。
                 .clip(RoundedCornerShape(cardRadiusDp))
                 .BreezySurfaceStyle(
                     style = BreezyVisualStyle.Normal,
@@ -289,6 +305,41 @@ fun MusicPlayerScreen(
                     }
                 )
         ) {
+
+            // 公用背景：播放页 / 歌词页 / 播放列表页共用这一层。
+            // 它在卡片内部、被卡片裁切，所以上拉时长出来的是"一整块"而不是两层；
+            // 而卡片本身不参与翻页缩放，因此滑动时它始终铺满整屏。
+            // 背景用的位图在取到的时候就"已经模糊好"了（8px 放大到 96px），
+            // 这里只做透明度淡入，不存在"先清晰后变糊"的切换时机。
+            CoverBlurLayer(
+                path = coverPath,
+                alpha = backdropFade,
+                scrim = 0.52f,
+                shape = RoundedCornerShape(cardRadiusDp)
+            )
+
+            // 播放页的“内容”（封面、标题、进度、按钮）单独成组：
+            // 左右翻页时只有这组缩放、模糊、淡出，背景保持不动——
+            // 三个页面共用同一张背景，滑过来的歌词页自己不带背景。
+            val expandedForPages = ((p - 0.6f) / 0.4f).coerceIn(0f, 1f)
+            val pageDepth = abs(pagePosition.value).coerceIn(0f, 1f) * expandedForPages
+            val contentAlpha = (1f - pageDepth * 0.92f).coerceIn(0f, 1f)
+            // 量化到 4dp 一档：拖动时不会每帧新建 RenderEffect
+            val contentBlurDp = ((pageDepth * 20f).toInt() / 4 * 4).dp
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = contentAlpha
+                        val s = 1f - pageDepth * 0.10f
+                        scaleX = s
+                        scaleY = s
+                        translationY = pageDepth * screenHeightPx * 0.03f
+                    }
+                    .blur(contentBlurDp)
+            ) {
+
             // ═══════════════════════════════════════
             // ── 专辑封面 ──
             // ═══════════════════════════════════════
@@ -362,6 +413,7 @@ fun MusicPlayerScreen(
             MusicProgressBar(
                 progress = currentProgress,
                 duration = songDuration,
+                barColor = coverAccent,
                 onSeek = { fraction ->
                     PlaybackState.seekTo(fraction.coerceIn(0f, 1f))
                 },
@@ -390,8 +442,10 @@ fun MusicPlayerScreen(
                 modifier = Modifier
                     .offset(x = buttonsXDp, y = buttonsYDp)
                     .width(buttonsWidthDp),
-                progress = p
+                progress = p,
+                accentColor = coverAccent
             )
+            }  // end player content group
 
         }  // end card Box children
 
@@ -418,8 +472,9 @@ fun MusicPlayerScreen(
                         .graphicsLayer {
                             translationX = playlistTx
                             translationY = slideUpY
+
                         }
-                        .background(BreezyTheme.colors.background)
+
                         .systemBarsPadding()
                         .pointerInput(Unit) {
                             detectHorizontalDragGestures(
@@ -454,8 +509,9 @@ fun MusicPlayerScreen(
                         .graphicsLayer {
                             translationX = lyricsTx
                             translationY = slideUpY
+
                         }
-                        .background(BreezyTheme.colors.background)
+
                         .systemBarsPadding()
                         .pointerInput(Unit) {
                             detectHorizontalDragGestures(
@@ -501,20 +557,24 @@ private fun PlayerButtons(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
-    progress: Float
+    progress: Float,
+    accentColor: Color = BreezyTheme.colors.primary
 ) {
     val buttonSize = lerpDp(40.dp, 56.dp, progress)
     val iconSize = lerpDp(24.dp, 36.dp, progress)
     val playButtonSize = lerpDp(48.dp, 72.dp, progress)
     val playIconSize = lerpDp(26.dp, 40.dp, progress)
+    // 主色不再取全局主题色：跟着封面走，每首歌的按钮色都和它的封面是一套。
     val playBgColor = lerpColor(
-        BreezyTheme.colors.primary.copy(alpha = 0.15f),
-        BreezyTheme.colors.primary,
+        accentColor.copy(alpha = 0.15f),
+        accentColor,
         progress
     )
+    // 图标用黑白二选一，按底色亮度挑，避免浅色封面上白图标糊掉。
+    val onAccent = if (accentColor.luminance() > 0.62f) Color.Black.copy(alpha = 0.88f) else Color.White
     val playIconTint = lerpColor(
         BreezyTheme.colors.onSurface,
-        BreezyTheme.colors.onPrimary,
+        onAccent,
         progress
     )
 
@@ -628,7 +688,8 @@ private fun MusicProgressBar(
     progress: Float,
     duration: Long,
     onSeek: (Float) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    barColor: Color = BreezyTheme.colors.primary
 ) {
     val currentMs = (progress * duration).toLong()
 
@@ -659,7 +720,7 @@ private fun MusicProgressBar(
                     .fillMaxWidth(progress.coerceIn(0f, 1f))
                     .height(8.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .background(BreezyTheme.colors.primary)
+                    .background(barColor)
             )
         }
 

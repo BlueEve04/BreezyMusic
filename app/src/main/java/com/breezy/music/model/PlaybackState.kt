@@ -206,7 +206,8 @@ object PlaybackState {
             PlaylistHistory.save(ctx, playlist, currentIndex)
         }
         AudioEngine.stop()
-        LyricPublisher.stopIfNeeded()
+        // 4.0 协议：切歌无需清理，只有显式「停止/清空」才清掉外部歌词
+        LyricPublisher.clear()
         playlist = emptyList()
         currentIndex = -1
         currentSong = null

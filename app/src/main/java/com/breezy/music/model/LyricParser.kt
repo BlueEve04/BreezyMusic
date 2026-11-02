@@ -45,8 +45,9 @@ object LyricParser {
                 return emptyList()
             }
             val reader = BufferedReader(InputStreamReader(inputStream, "UTF-8"))
-            var trackIndex = 0
-            var prevTimeMs = -1L
+            var blockBase = 0
+            var lastTimeMs = -1L
+            var dupeInBlock = 0
 
             reader.forEachLine { line ->
                 val trimmed = line.trim()
@@ -65,13 +66,28 @@ object LyricParser {
                     val timeMs = min * 60_000L + sec * 1000L + ms
                     val text = match.groupValues[4].trim()
 
-                    // 检测时间是否回退（新的多轨段落开始）
-                    if (timeMs < prevTimeMs) {
-                        trackIndex++
+                    // 轨道判定要同时认两种双语排布：
+                    // ① 块状：原文一整块在前，翻译一整块在后（时间回退 → 新块）
+                    // ② 交错：原文行后紧跟同一时间戳的翻译行（时间相同 → 同块下一轨）
+                    // 之前只认 ①，交错排布的文件会被整篇当成原文，翻译于是从未发出。
+                    val track = when {
+                        timeMs < lastTimeMs -> {
+                            blockBase++
+                            dupeInBlock = 0
+                            blockBase
+                        }
+                        timeMs == lastTimeMs -> {
+                            dupeInBlock++
+                            blockBase + dupeInBlock
+                        }
+                        else -> {
+                            dupeInBlock = 0
+                            blockBase
+                        }
                     }
-                    prevTimeMs = timeMs
+                    lastTimeMs = timeMs
 
-                    lines.add(LyricLine(timeMs, text, trackIndex))
+                    lines.add(LyricLine(timeMs, text, track))
                 }
                 // 忽略元数据行 [ti:] [ar:] 等
             }
